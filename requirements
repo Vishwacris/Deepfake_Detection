@@ -1,0 +1,12 @@
+# Forensic AI v3 — MobileNetV2 + LIME + Grad-CAM
+# pip install -r requirements.txt
+
+tensorflow>=2.13.0          # use tensorflow-cpu for CPU-only machines
+flask>=3.0.0
+flask-cors>=4.0.0
+lime>=0.2.0.1
+Pillow>=10.0.0
+opencv-python-headless>=4.8.0
+scikit-image>=0.21.0
+numpy>=1.24.0
+scikit-learn>=1.3.0
