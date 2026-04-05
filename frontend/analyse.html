@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>ForensicAI — Analysing</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#09090b;--surface:#111113;--surface2:#18181b;--surface3:#1f1f23;
+  --border:#27272a;--border2:#3f3f46;
+  --ink:#fafafa;--ink2:#a1a1aa;--ink3:#71717a;--ink4:#52525b;
+  --accent:#6366f1;--accent2:#818cf8;--accent-glow:rgba(99,102,241,.25);
+  --real:#22c55e;--fake:#ef4444;
+  --mono:'JetBrains Mono',monospace;--sans:'Inter',sans-serif;
+}
+body{background:var(--bg);color:var(--ink);font-family:var(--sans);min-height:100vh;display:flex;flex-direction:column;overflow:hidden}
+body::before{content:'';position:fixed;inset:0;background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.03'/%3E%3C/svg%3E");pointer-events:none;z-index:0;opacity:.4}
+.blob{position:fixed;border-radius:50%;filter:blur(80px);pointer-events:none;z-index:0;opacity:.3}
+.blob-1{width:350px;height:350px;background:radial-gradient(circle,rgba(99,102,241,.3),transparent 70%);top:-80px;right:-80px}
+.blob-2{width:250px;height:250px;background:radial-gradient(circle,rgba(168,85,247,.2),transparent 70%);bottom:10%;left:-60px}
+
+nav{position:relative;z-index:10;background:rgba(9,9,11,.85);border-bottom:1px solid var(--border);padding:0 2rem;height:64px;display:flex;align-items:center;gap:1rem;backdrop-filter:blur(16px)}
+.nav-brand{display:flex;align-items:center;gap:.65rem;text-decoration:none}
+.nav-icon{width:36px;height:36px;background:linear-gradient(135deg,var(--accent),#a78bfa);border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:1.1rem;box-shadow:0 0 20px var(--accent-glow)}
+.nav-title{font-weight:800;font-size:1.05rem;letter-spacing:-.4px;color:var(--ink)}
+.nav-badge{font-size:.62rem;font-family:var(--mono);background:var(--surface2);border:1px solid var(--border2);color:var(--ink3);padding:.15rem .45rem;border-radius:4px}
+.nav-steps{margin-left:auto;display:flex;align-items:center;gap:.25rem}
+.step{display:flex;align-items:center;gap:.4rem;padding:.35rem .75rem;border-radius:8px;font-size:.72rem;font-weight:500;color:var(--ink4)}
+.step.active{background:rgba(99,102,241,.12);color:var(--accent2);border:1px solid rgba(99,102,241,.2)}
+.step.done{color:var(--real)}
+.step-num{width:18px;height:18px;border-radius:50%;background:var(--surface3);border:1px solid var(--border2);display:flex;align-items:center;justify-content:center;font-size:.6rem;font-family:var(--mono)}
+.step.active .step-num{background:var(--accent);border-color:var(--accent);color:#fff}
+.step.done .step-num{background:#16a34a;border-color:var(--real);color:#fff}
+.step-sep{width:20px;height:1px;background:var(--border);margin:0 .1rem}
+
+main{flex:1;display:flex;align-items:center;justify-content:center;padding:2rem;position:relative;z-index:1}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:20px;padding:2.5rem 2rem;max-width:480px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,.4)}
+
+/* Animated scanner */
+.scanner-wrap{width:90px;height:90px;margin:0 auto 2rem;position:relative}
+.scanner-ring{position:absolute;inset:0;border:2px solid transparent;border-radius:50%;animation:spin 1.2s linear infinite}
+.scanner-ring:nth-child(1){border-top-color:var(--accent);animation-duration:1.2s}
+.scanner-ring:nth-child(2){inset:6px;border-right-color:#a78bfa;animation-duration:1.8s;animation-direction:reverse}
+.scanner-ring:nth-child(3){inset:12px;border-bottom-color:#c084fc;animation-duration:2.4s}
+.scanner-icon{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:1.8rem}
+.scanner-glow{position:absolute;inset:-4px;border-radius:50%;background:radial-gradient(circle,var(--accent-glow),transparent 70%);animation:pulse 2s ease-in-out infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+@keyframes pulse{0%,100%{opacity:.4;transform:scale(1)}50%{opacity:.8;transform:scale(1.05)}}
+
+.card-title{font-size:1.4rem;font-weight:800;letter-spacing:-.5px;text-align:center;margin-bottom:.4rem}
+.card-sub{font-size:.85rem;color:var(--ink3);text-align:center;margin-bottom:2rem;line-height:1.6}
+
+/* Steps list */
+.steps-list{display:flex;flex-direction:column;gap:.5rem;margin-bottom:1.75rem}
+.step-item{display:flex;align-items:center;gap:.75rem;padding:.6rem .85rem;border-radius:10px;background:var(--surface2);border:1px solid var(--border);transition:all .35s}
+.step-item.active{background:rgba(99,102,241,.08);border-color:rgba(99,102,241,.2)}
+.step-item.done{background:rgba(34,197,94,.05);border-color:rgba(34,197,94,.15)}
+.step-ico{font-size:.95rem;flex-shrink:0;width:22px;text-align:center}
+.step-label{font-size:.8rem;font-weight:500;color:var(--ink3);flex:1;transition:color .3s}
+.step-item.active .step-label{color:var(--accent2)}
+.step-item.done .step-label{color:var(--real)}
+.step-chk{margin-left:auto;font-size:.75rem;opacity:0;transition:opacity .3s;color:var(--real)}
+.step-item.done .step-chk{opacity:1}
+.step-spinner{margin-left:auto;width:14px;height:14px;border:2px solid var(--border2);border-top-color:var(--accent);border-radius:50%;animation:spin .8s linear infinite;display:none}
+.step-item.active .step-spinner{display:block}
+.step-item.active .step-chk{display:none}
+
+/* Progress */
+.progress-wrap{background:var(--surface3);border-radius:99px;height:3px;overflow:hidden;margin-bottom:.5rem}
+.progress-bar{height:100%;background:linear-gradient(90deg,var(--accent),#a78bfa);border-radius:99px;width:0;transition:width .5s cubic-bezier(.4,0,.2,1)}
+.progress-info{display:flex;justify-content:space-between;align-items:center}
+.progress-pct{font-family:var(--mono);font-size:.65rem;color:var(--ink3)}
+.progress-status{font-family:var(--mono);font-size:.65rem;color:var(--ink4)}
+
+/* Thumbnail */
+.thumb-wrap{border-radius:8px;overflow:hidden;border:1px solid var(--border);background:#000;max-height:120px;display:none;margin-bottom:1.5rem}
+.thumb-wrap img{width:100%;max-height:120px;object-fit:contain;display:block;opacity:.65;filter:grayscale(30%)}
+
+.err-card{background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.2);border-radius:10px;padding:1.25rem;margin-top:1rem;display:none}
+.err-title{font-weight:700;color:#fca5a5;margin-bottom:.35rem;font-size:.9rem}
+.err-msg{font-size:.78rem;color:#fca5a5;margin-bottom:.75rem;font-family:var(--mono);opacity:.8}
+.retry-btn{background:var(--surface2);border:1px solid var(--border2);color:var(--ink2);border-radius:8px;padding:.5rem 1rem;font-size:.8rem;font-weight:500;cursor:pointer;transition:all .15s}
+.retry-btn:hover{border-color:var(--border2);color:var(--ink)}
+</style>
+</head>
+<body>
+<div class="blob blob-1"></div>
+<div class="blob blob-2"></div>
+
+<nav>
+  <a class="nav-brand" href="/">
+    <div class="nav-icon">🔬</div>
+    <span class="nav-title">ForensicAI</span>
+  </a>
+  <span class="nav-badge">v3.1</span>
+  <div class="nav-steps">
+    <div class="step done"><span class="step-num">1</span>Upload</div>
+    <div class="step-sep"></div>
+    <div class="step active"><span class="step-num">2</span>Analyse</div>
+    <div class="step-sep"></div>
+    <div class="step"><span class="step-num">3</span>Results</div>
+  </div>
+</nav>
+
+<main>
+  <div class="card">
+    <div class="scanner-wrap">
+      <div class="scanner-glow"></div>
+      <div class="scanner-ring"></div>
+      <div class="scanner-ring"></div>
+      <div class="scanner-ring"></div>
+      <div class="scanner-icon" id="scanner-icon">🔬</div>
+    </div>
+
+    <div class="card-title" id="main-title">Analysing Image</div>
+    <div class="card-sub" id="main-sub">Running deep learning forensic pipeline…</div>
+
+    <div class="thumb-wrap" id="thumb-wrap">
+      <img id="preview-thumb" alt=""/>
+    </div>
+
+    <div class="steps-list">
+      <div class="step-item" id="s1">
+        <div class="step-ico">📐</div>
+        <div class="step-label">Preprocessing &amp; normalisation</div>
+        <div class="step-spinner"></div>
+        <div class="step-chk">✓</div>
+      </div>
+      <div class="step-item" id="s2">
+        <div class="step-ico">🧠</div>
+        <div class="step-label">MobileNetV2 inference</div>
+        <div class="step-spinner"></div>
+        <div class="step-chk">✓</div>
+      </div>
+      <div class="step-item" id="s3">
+        <div class="step-ico">🗺️</div>
+        <div class="step-label">Grad-CAM heatmap generation</div>
+        <div class="step-spinner"></div>
+        <div class="step-chk">✓</div>
+      </div>
+      <div class="step-item" id="s4">
+        <div class="step-ico">🔍</div>
+        <div class="step-label">LIME superpixel explanation</div>
+        <div class="step-spinner"></div>
+        <div class="step-chk">✓</div>
+      </div>
+      <div class="step-item" id="s5">
+        <div class="step-ico">📝</div>
+        <div class="step-label">Building reasoning report</div>
+        <div class="step-spinner"></div>
+        <div class="step-chk">✓</div>
+      </div>
+    </div>
+
+    <div class="progress-wrap"><div class="progress-bar" id="progress"></div></div>
+    <div class="progress-info">
+      <span class="progress-pct" id="pct-label">0%</span>
+      <span class="progress-status" id="status-label">Initialising…</span>
+    </div>
+
+    <div class="err-card" id="err-card">
+      <div class="err-title">⚠ Analysis Failed</div>
+      <div class="err-msg" id="err-msg"></div>
+      <button class="retry-btn" onclick="window.location.href='/'">← Start Over</button>
+    </div>
+  </div>
+</main>
+
+<script>
+const STEPS   = ["s1","s2","s3","s4","s5"];
+const PCTS    = [10, 30, 55, 85, 98];
+const LABELS  = ["Preprocessing…","Running inference…","Computing heatmap…","Running LIME…","Building report…"];
+
+const preview = sessionStorage.getItem("imgBase64");
+if (preview) {
+  document.getElementById("thumb-wrap").style.display = "block";
+  document.getElementById("preview-thumb").src = preview;
+}
+
+function advanceTo(i) {
+  STEPS.forEach((id, j) => {
+    const el = document.getElementById(id);
+    el.classList.remove("active","done");
+    if (j < i)  el.classList.add("done");
+    if (j === i) el.classList.add("active");
+  });
+  const pct = PCTS[Math.min(i, PCTS.length-1)];
+  document.getElementById("progress").style.width = pct + "%";
+  document.getElementById("pct-label").textContent = pct + "%";
+  document.getElementById("status-label").textContent = LABELS[Math.min(i, LABELS.length-1)];
+}
+
+function showError(msg) {
+  document.getElementById("scanner-icon").textContent = "❌";
+  document.getElementById("main-title").textContent = "Analysis Failed";
+  document.getElementById("main-sub").textContent = "";
+  document.getElementById("err-msg").textContent = msg;
+  document.getElementById("err-card").style.display = "block";
+  STEPS.forEach(id => document.getElementById(id).classList.remove("active"));
+}
+
+async function runAnalysis() {
+  const b64  = sessionStorage.getItem("imgBase64");
+  const name = sessionStorage.getItem("imgName") || "image.jpg";
+  const type = sessionStorage.getItem("imgType") || "image/jpeg";
+  if (!b64) { window.location.href = "/"; return; }
+
+  const arr   = b64.split(",")[1];
+  const bin   = atob(arr);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  const blob = new Blob([bytes], {type});
+  const file = new File([blob], name, {type});
+  const fd   = new FormData();
+  fd.append("image", file);
+
+  advanceTo(0);
+  const delays = [400, 900, 1600, 2400];
+  delays.forEach((d, i) => setTimeout(() => advanceTo(i + 1), d));
+
+  try {
+    const res  = await fetch("/api/predict", {method:"POST", body:fd});
+    const data = await res.json();
+    if (!res.ok || data.error) throw new Error(data.error || "Server error");
+
+    STEPS.forEach(id => {
+      const el = document.getElementById(id);
+      el.classList.remove("active");
+      el.classList.add("done");
+    });
+    document.getElementById("progress").style.width = "100%";
+    document.getElementById("pct-label").textContent = "100%";
+    document.getElementById("status-label").textContent = "Complete!";
+    document.getElementById("scanner-icon").textContent = "✅";
+    document.getElementById("main-title").textContent = "Analysis Complete";
+    document.getElementById("main-sub").textContent = "Redirecting to results…";
+
+    sessionStorage.setItem("result", JSON.stringify(data));
+    setTimeout(() => window.location.href = "/results", 750);
+
+  } catch(e) {
+    showError(e.message);
+  }
+}
+
+setTimeout(runAnalysis, 300);
+</script>
+</body>
+</html>

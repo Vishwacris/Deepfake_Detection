@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>ForensicAI — Image Authenticity Detector</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#09090b;--surface:#111113;--surface2:#18181b;--surface3:#1f1f23;
+  --border:#27272a;--border2:#3f3f46;
+  --ink:#fafafa;--ink2:#a1a1aa;--ink3:#71717a;--ink4:#52525b;
+  --accent:#6366f1;--accent2:#818cf8;--accent-glow:rgba(99,102,241,.25);
+  --real:#22c55e;--real-dark:#16a34a;--real-glow:rgba(34,197,94,.2);
+  --fake:#ef4444;--fake-dark:#dc2626;--fake-glow:rgba(239,68,68,.2);
+  --mono:'JetBrains Mono',monospace;--sans:'Inter',sans-serif;
+  --r:12px;--r2:16px;
+}
+body{background:var(--bg);color:var(--ink);font-family:var(--sans);min-height:100vh;display:flex;flex-direction:column;overflow-x:hidden}
+
+/* ── Noise texture overlay ── */
+body::before{content:'';position:fixed;inset:0;background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.03'/%3E%3C/svg%3E");pointer-events:none;z-index:0;opacity:.4}
+
+/* ── Nav ── */
+nav{position:relative;z-index:10;background:rgba(9,9,11,.85);border-bottom:1px solid var(--border);padding:0 2rem;height:64px;display:flex;align-items:center;gap:1rem;backdrop-filter:blur(16px)}
+.nav-brand{display:flex;align-items:center;gap:.65rem;text-decoration:none}
+.nav-icon{width:36px;height:36px;background:linear-gradient(135deg,var(--accent),#a78bfa);border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:1.1rem;box-shadow:0 0 20px var(--accent-glow)}
+.nav-title{font-weight:800;font-size:1.05rem;letter-spacing:-.4px;color:var(--ink)}
+.nav-badge{font-size:.62rem;font-family:var(--mono);background:var(--surface2);border:1px solid var(--border2);color:var(--ink3);padding:.15rem .45rem;border-radius:4px;letter-spacing:.05em}
+.nav-steps{margin-left:auto;display:flex;align-items:center;gap:.25rem}
+.step{display:flex;align-items:center;gap:.4rem;padding:.35rem .75rem;border-radius:8px;font-size:.72rem;font-weight:500;color:var(--ink4);transition:all .2s}
+.step.active{background:rgba(99,102,241,.12);color:var(--accent2);border:1px solid rgba(99,102,241,.2)}
+.step.done{color:var(--real)}
+.step-num{width:18px;height:18px;border-radius:50%;background:var(--surface3);border:1px solid var(--border2);display:flex;align-items:center;justify-content:center;font-size:.6rem;font-family:var(--mono)}
+.step.active .step-num{background:var(--accent);border-color:var(--accent);color:#fff}
+.step.done .step-num{background:var(--real-dark);border-color:var(--real);color:#fff}
+.step-sep{width:20px;height:1px;background:var(--border);margin:0 .1rem}
+
+/* ── Hero ── */
+.hero{position:relative;z-index:1;text-align:center;padding:4rem 1.5rem 0}
+.hero-eyebrow{font-family:var(--mono);font-size:.7rem;letter-spacing:.15em;color:var(--accent2);text-transform:uppercase;margin-bottom:1.25rem;display:inline-flex;align-items:center;gap:.5rem}
+.hero-eyebrow::before,.hero-eyebrow::after{content:'';width:24px;height:1px;background:currentColor;opacity:.4}
+.hero h1{font-size:clamp(2.2rem,5vw,3.5rem);font-weight:900;letter-spacing:-1.5px;line-height:1.1;color:var(--ink);margin-bottom:1rem}
+.hero h1 span{background:linear-gradient(135deg,var(--accent2),#c084fc);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+.hero-sub{font-size:1rem;color:var(--ink2);max-width:520px;margin:0 auto 3rem;line-height:1.7}
+
+/* ── Glow blobs ── */
+.blob{position:fixed;border-radius:50%;filter:blur(80px);pointer-events:none;z-index:0;opacity:.35}
+.blob-1{width:400px;height:400px;background:radial-gradient(circle,rgba(99,102,241,.3),transparent 70%);top:-100px;right:-100px}
+.blob-2{width:300px;height:300px;background:radial-gradient(circle,rgba(168,85,247,.2),transparent 70%);bottom:20%;left:-80px}
+
+/* ── Upload zone ── */
+main{flex:1;position:relative;z-index:1;padding:0 1.5rem 4rem}
+.upload-wrap{max-width:680px;margin:0 auto}
+
+#drop-zone{
+  background:var(--surface);border:2px dashed var(--border2);border-radius:var(--r2);
+  padding:3.5rem 2rem;text-align:center;cursor:pointer;transition:all .25s;
+  position:relative;overflow:hidden;
+}
+#drop-zone::before{content:'';position:absolute;inset:0;background:radial-gradient(ellipse at 50% 0%,rgba(99,102,241,.05),transparent 60%);pointer-events:none}
+#drop-zone:hover,#drop-zone.over{border-color:var(--accent);background:rgba(99,102,241,.04);box-shadow:0 0 40px var(--accent-glow)}
+#drop-zone.over{transform:scale(1.01)}
+#file-input{display:none}
+
+.dz-icon-wrap{width:72px;height:72px;margin:0 auto 1.25rem;background:var(--surface2);border:1px solid var(--border2);border-radius:16px;display:flex;align-items:center;justify-content:center;font-size:2rem;position:relative}
+.dz-icon-wrap::after{content:'';position:absolute;inset:-1px;border-radius:16px;background:linear-gradient(135deg,rgba(99,102,241,.2),transparent);pointer-events:none}
+.dz-title{font-size:1.15rem;font-weight:700;color:var(--ink);margin-bottom:.4rem;letter-spacing:-.3px}
+.dz-sub{font-size:.85rem;color:var(--ink3);margin-bottom:1.25rem}
+.dz-sub b{color:var(--accent2);font-weight:600}
+.fmt-row{display:flex;flex-wrap:wrap;justify-content:center;gap:.4rem}
+.fmt{background:var(--surface2);border:1px solid var(--border);border-radius:5px;padding:.18rem .5rem;font-family:var(--mono);font-size:.58rem;color:var(--ink3);letter-spacing:.05em}
+
+/* ── Preview ── */
+#preview-section{display:none}
+.preview-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r2);overflow:hidden;margin-bottom:1rem}
+.preview-header{padding:.85rem 1.1rem;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between}
+.preview-header-title{font-size:.8rem;font-weight:600;color:var(--ink2);display:flex;align-items:center;gap:.4rem}
+.preview-img-wrap{background:#000;position:relative;max-height:300px;overflow:hidden;display:flex;align-items:center;justify-content:center}
+#preview-img{max-width:100%;max-height:300px;object-fit:contain;display:block}
+.preview-overlay{position:absolute;bottom:0;left:0;right:0;padding:.5rem .75rem;background:linear-gradient(transparent,rgba(0,0,0,.7));display:flex;align-items:center;justify-content:space-between}
+.preview-badge{font-family:var(--mono);font-size:.62rem;color:rgba(255,255,255,.7)}
+.preview-meta{padding:.85rem 1.1rem;display:flex;align-items:center;justify-content:space-between}
+.meta-info{display:flex;flex-direction:column;gap:.15rem}
+.meta-name{font-size:.82rem;font-weight:600;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:280px}
+.meta-size{font-family:var(--mono);font-size:.68rem;color:var(--ink3)}
+.change-btn{background:var(--surface2);border:1px solid var(--border2);color:var(--ink2);border-radius:8px;padding:.35rem .75rem;font-size:.75rem;font-weight:500;cursor:pointer;transition:all .15s;display:flex;align-items:center;gap:.3rem}
+.change-btn:hover{border-color:var(--border2);color:var(--ink);background:var(--surface3)}
+
+/* ── Analyse button ── */
+.analyse-btn{width:100%;padding:.9rem 1.5rem;background:linear-gradient(135deg,var(--accent),#7c3aed);color:#fff;border:none;border-radius:var(--r);font-family:var(--sans);font-weight:700;font-size:.95rem;cursor:pointer;transition:all .25s;display:flex;align-items:center;justify-content:center;gap:.6rem;letter-spacing:-.2px;box-shadow:0 4px 20px var(--accent-glow);position:relative;overflow:hidden}
+.analyse-btn::before{content:'';position:absolute;inset:0;background:linear-gradient(135deg,rgba(255,255,255,.1),transparent);opacity:0;transition:opacity .2s}
+.analyse-btn:hover:not(:disabled)::before{opacity:1}
+.analyse-btn:hover:not(:disabled){transform:translateY(-2px);box-shadow:0 8px 30px var(--accent-glow)}
+.analyse-btn:disabled{opacity:.35;cursor:not-allowed;transform:none;box-shadow:none}
+
+.err-box{background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.2);border-radius:8px;padding:.75rem 1rem;font-size:.8rem;color:#fca5a5;display:none;margin-bottom:.75rem;font-family:var(--mono)}
+
+/* ── Feature cards ── */
+.features{display:grid;grid-template-columns:repeat(3,1fr);gap:.85rem;margin-top:2.5rem}
+@media(max-width:560px){.features{grid-template-columns:1fr}}
+.feat{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:1rem;transition:border-color .2s}
+.feat:hover{border-color:var(--border2)}
+.feat-icon{font-size:1.5rem;margin-bottom:.55rem}
+.feat-name{font-size:.8rem;font-weight:600;color:var(--ink);margin-bottom:.3rem;letter-spacing:-.2px}
+.feat-desc{font-size:.72rem;color:var(--ink3);line-height:1.55}
+</style>
+</head>
+<body>
+
+<div class="blob blob-1"></div>
+<div class="blob blob-2"></div>
+
+<nav>
+  <a class="nav-brand" href="/">
+    <div class="nav-icon">🔬</div>
+    <span class="nav-title">ForensicAI</span>
+  </a>
+  <span class="nav-badge">v3.1</span>
+  <div class="nav-steps">
+    <div class="step active"><span class="step-num">1</span>Upload</div>
+    <div class="step-sep"></div>
+    <div class="step"><span class="step-num">2</span>Analyse</div>
+    <div class="step-sep"></div>
+    <div class="step"><span class="step-num">3</span>Results</div>
+  </div>
+</nav>
+
+<div class="hero">
+  <div class="hero-eyebrow">Deep Learning Forensics</div>
+  <h1>Is this image <span>real or fake?</span></h1>
+  <p class="hero-sub">Upload any image and our MobileNetV2 model will detect AI generation, deepfakes, and digital manipulation using Grad-CAM and LIME explainability.</p>
+</div>
+
+<main>
+  <div class="upload-wrap">
+
+    <div id="drop-zone">
+      <input type="file" id="file-input" accept="image/*"/>
+      <div class="dz-icon-wrap">🖼️</div>
+      <div class="dz-title">Drop your image here</div>
+      <div class="dz-sub">or <b>click to browse</b> from your device</div>
+      <div class="fmt-row">
+        <span class="fmt">JPEG</span><span class="fmt">PNG</span>
+        <span class="fmt">BMP</span><span class="fmt">WebP</span>
+        <span class="fmt">TIFF</span><span class="fmt">GIF</span>
+      </div>
+    </div>
+
+    <div id="preview-section">
+      <div class="preview-card">
+        <div class="preview-header">
+          <span class="preview-header-title">📷 Selected Image</span>
+        </div>
+        <div class="preview-img-wrap">
+          <img id="preview-img" alt="Selected image"/>
+          <div class="preview-overlay">
+            <span class="preview-badge" id="preview-badge">—</span>
+          </div>
+        </div>
+        <div class="preview-meta">
+          <div class="meta-info">
+            <div class="meta-name" id="file-name">—</div>
+            <div class="meta-size" id="file-size">—</div>
+          </div>
+          <button class="change-btn" id="change-btn">↺ Change</button>
+        </div>
+      </div>
+
+      <div class="err-box" id="err-box"></div>
+      <button class="analyse-btn" id="analyse-btn" disabled>
+        <span>Run Forensic Analysis</span> <span>→</span>
+      </button>
+    </div>
+
+    <div class="features">
+      <div class="feat">
+        <div class="feat-icon">🧠</div>
+        <div class="feat-name">MobileNetV2</div>
+        <div class="feat-desc">Fine-tuned on 140k real &amp; AI-generated face images for binary classification.</div>
+      </div>
+      <div class="feat">
+        <div class="feat-icon">🗺️</div>
+        <div class="feat-name">Grad-CAM</div>
+        <div class="feat-desc">Gradient-weighted activation maps reveal exactly which regions influenced the verdict.</div>
+      </div>
+      <div class="feat">
+        <div class="feat-icon">🔍</div>
+        <div class="feat-name">LIME XAI</div>
+        <div class="feat-desc">Superpixel perturbation builds a local explanation with human-readable reasoning.</div>
+      </div>
+    </div>
+
+  </div>
+</main>
+
+<script>
+const dz = document.getElementById("drop-zone");
+const fi = document.getElementById("file-input");
+const ps = document.getElementById("preview-section");
+const pi = document.getElementById("preview-img");
+const fn = document.getElementById("file-name");
+const fsz = document.getElementById("file-size");
+const pb = document.getElementById("preview-badge");
+const ab = document.getElementById("analyse-btn");
+const eb = document.getElementById("err-box");
+let selected = null;
+
+dz.addEventListener("click", () => fi.click());
+fi.addEventListener("change", e => e.target.files[0] && pick(e.target.files[0]));
+document.getElementById("change-btn").addEventListener("click", () => {
+  selected = null; ab.disabled = true;
+  ps.style.display = "none"; dz.style.display = "block"; fi.value = "";
+});
+dz.addEventListener("dragover",  e => { e.preventDefault(); dz.classList.add("over"); });
+dz.addEventListener("dragleave", () => dz.classList.remove("over"));
+dz.addEventListener("drop",      e => {
+  e.preventDefault(); dz.classList.remove("over");
+  e.dataTransfer.files[0] && pick(e.dataTransfer.files[0]);
+});
+
+function pick(f) {
+  if (!f.type.startsWith("image/")) { showErr("Please upload an image file."); return; }
+  selected = f; hideErr();
+  const r = new FileReader();
+  r.onload = ev => {
+    pi.src = ev.target.result;
+    fn.textContent  = f.name;
+    fsz.textContent = fmt(f.size) + " · " + f.type.split("/")[1].toUpperCase();
+    pb.textContent  = f.type.replace("image/","").toUpperCase() + " · " + fmt(f.size);
+    dz.style.display = "none";
+    ps.style.display = "block";
+    ab.disabled = false;
+  };
+  r.readAsDataURL(f);
+}
+
+ab.addEventListener("click", function() {
+  if (!selected) return;
+  this.disabled = true;
+  this.innerHTML = "<span>Loading…</span>";
+  const r = new FileReader();
+  r.onload = ev => {
+    sessionStorage.setItem("imgBase64", ev.target.result);
+    sessionStorage.setItem("imgName",   selected.name);
+    sessionStorage.setItem("imgType",   selected.type);
+    sessionStorage.setItem("imgSize",   selected.size);
+    window.location.href = "/analyse";
+  };
+  r.readAsDataURL(selected);
+});
+
+function fmt(b){ return b<1024?b+" B":b<1048576?(b/1024).toFixed(1)+" KB":(b/1048576).toFixed(1)+" MB"; }
+function showErr(m){ eb.textContent="⚠ "+m; eb.style.display="block"; }
+function hideErr(){ eb.style.display="none"; }
+</script>
+</body>
+</html>
